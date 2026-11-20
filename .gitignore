@@ -36,3 +36,6 @@ dist-ssr
 *.key
 *.pem
 *.pfx
+
+# TypeScript incremental build cache
+*.tsbuildinfo

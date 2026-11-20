@@ -1,0 +1,8 @@
+AGENTS.md
+LICENSE.md
+package-lock.json
+node_modules/
+dist/
+dist-ssr/
+coverage/
+src-tauri/
