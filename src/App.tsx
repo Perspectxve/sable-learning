@@ -1,50 +1,104 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useReducer, useRef, type CSSProperties } from "react";
+import { sampleWorkspaces } from "./learning/sampleData";
+import { DocumentPane } from "./shell/DocumentPane";
+import { ProjectSidebar } from "./shell/ProjectSidebar";
+import { TabStrip } from "./shell/TabStrip";
+import { TopBar } from "./shell/TopBar";
+import { createShellState, shellReducer } from "./shell/navigation";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [state, dispatch] = useReducer(
+    shellReducer,
+    sampleWorkspaces,
+    createShellState,
+  );
+  const editorRef = useRef<HTMLDivElement>(null);
+  const workspace = sampleWorkspaces.find(
+    ({ id }) => id === state.activeWorkspaceId,
+  );
+  if (!workspace) return null;
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  const session = state.sessions[workspace.id];
+  const sidebar = session.sidebar;
+  const project =
+    sidebar.mode === "project"
+      ? workspace.projects.find(({ id }) => id === sidebar.projectId)
+      : undefined;
+  const tabs = session.openTabs.map((id) => workspace.documents[id]);
+  const document = session.activeTabId
+    ? workspace.documents[session.activeTabId]
+    : undefined;
+  const appearanceStyle = {
+    "--surface-opacity": state.appearance.surfaceOpacity,
+    backgroundImage: state.appearance.backgroundImage ?? undefined,
+  } satisfies CSSProperties & { "--surface-opacity": number };
+
+  function openDocument(documentId: string) {
+    dispatch({ type: "open-document", documentId });
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div
+      className="app-shell"
+      data-theme={state.appearance.theme}
+      style={appearanceStyle}
+    >
+      <TopBar
+        workspaces={sampleWorkspaces}
+        activeWorkspaceId={workspace.id}
+        sidebarVisibility={state.sidebarVisibility}
+        onSwitchWorkspace={(workspaceId) =>
+          dispatch({ type: "switch-workspace", workspaceId })
+        }
+        onSetSidebarVisibility={(visibility) =>
+          dispatch({ type: "set-sidebar-visibility", visibility })
+        }
+      />
+      <div className="workbench" data-sidebar={state.sidebarVisibility}>
+        {state.sidebarVisibility !== "hidden" && (
+          <ProjectSidebar
+            workspace={workspace}
+            project={project}
+            collapsed={state.sidebarVisibility === "collapsed"}
+            expandedFolderIds={session.expandedFolderIds}
+            activeTabId={session.activeTabId}
+            onShowProject={(projectId) =>
+              dispatch({ type: "show-project", projectId })
+            }
+            onShowOverview={() => dispatch({ type: "show-overview" })}
+            onToggleFolder={(folderId) =>
+              dispatch({ type: "toggle-folder", folderId })
+            }
+            onOpenDocument={openDocument}
+            onExpand={() =>
+              dispatch({
+                type: "set-sidebar-visibility",
+                visibility: "expanded",
+              })
+            }
+          />
+        )}
+        <main className="editor" aria-label="Document editor">
+          <TabStrip
+            tabs={tabs}
+            activeTabId={session.activeTabId}
+            onSelectTab={(tabId) => dispatch({ type: "select-tab", tabId })}
+            onCloseTab={(tabId) => dispatch({ type: "close-tab", tabId })}
+            onFocusEditor={() => editorRef.current?.focus()}
+          />
+          <DocumentPane
+            workspace={workspace}
+            document={document}
+            panelRef={editorRef}
+            onOpenDocument={(id) => {
+              openDocument(id);
+              editorRef.current?.focus();
+            }}
+          />
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 
